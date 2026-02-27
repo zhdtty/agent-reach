@@ -10,18 +10,23 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from base import BaseClient, logger
+from stealth import get_stealth_script
+from content_generator import ContentGenerator
 
 
 class TwitterClient(BaseClient):
     """Twitter/X 客户端 - 使用 Playwright 浏览器自动化"""
     
-    def __init__(self, cookie_file: Path):
+    def __init__(self, cookie_file: Path, account: str = "default", stealth: bool = True):
         super().__init__(cookie_file)
         self.base_url = "https://x.com"
+        self.account = account
+        self.stealth = stealth
         self.cookies_loaded = bool(self.cookies)
+        self.content_generator = ContentGenerator()
         
         if not self.cookies_loaded:
-            logger.warning("Twitter Cookie 未配置")
+            logger.warning(f"Twitter 账号 [{account}] Cookie 未配置")
     
     def _get_playwright(self):
         """延迟导入 playwright"""
@@ -91,6 +96,11 @@ class TwitterClient(BaseClient):
                     context.add_cookies(cookies)
                 
                 page = context.new_page()
+                
+                # 注入 stealth 脚本
+                if self.stealth:
+                    page.add_init_script(get_stealth_script())
+                    logger.debug("Stealth 模式已启用")
                 
                 # 访问搜索页面
                 search_url = f"https://x.com/search?q={query}&src=typed_query&f=live"
@@ -236,9 +246,15 @@ class TwitterClient(BaseClient):
             logger.error(f"获取时间线失败: {e}")
             return []
     
-    def post_tweet(self, text: str) -> Dict[str, Any]:
-        """发布推文"""
-        logger.info(f"发布推文: {text[:30]}...")
+    def post_tweet(self, text: str = None, topic: str = None, use_ai: bool = False) -> Dict[str, Any]:
+        """发布推文，支持 AI 生成"""
+        # AI 生成内容
+        if use_ai or (not text and topic):
+            text = self.content_generator.generate_tweet(topic or "日常分享")
+            logger.info(f"AI 生成推文: {text[:50]}...")
+        
+        if not text:
+            return {"success": False, "error": "请提供推文内容或主题"}
         
         if not self.cookies_loaded:
             return {"success": False, "error": "Cookie 未配置"}
@@ -341,3 +357,61 @@ class TwitterClient(BaseClient):
         except Exception as e:
             logger.error(f"获取用户信息失败: {e}")
             return {}
+
+    def reply_to_tweet(self, tweet_url: str, text: str = None, use_ai: bool = False) -> Dict[str, Any]:
+        """回复推文"""
+        logger.info(f"回复推文: {tweet_url}")
+
+        if not self.cookies_loaded:
+            return {"success": False, "error": "Cookie 未配置"}
+
+        try:
+            sync_playwright = self._get_playwright()
+
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=False)
+                context = browser.new_context(viewport={"width": 1920, "height": 1080})
+
+                cookies = self._build_cookies_for_playwright()
+                if cookies:
+                    context.add_cookies(cookies)
+
+                page = context.new_page()
+                if self.stealth:
+                    page.add_init_script(get_stealth_script())
+
+                page.goto(tweet_url, timeout=30000)
+                page.wait_for_timeout(2000)
+
+                # 提取原文内容用于 AI 生成
+                if use_ai or not text:
+                    original_text = ""
+                    tweet_text_el = page.query_selector('[data-testid="tweetText"]')
+                    if tweet_text_el:
+                        original_text = tweet_text_el.inner_text()
+                    text = self.content_generator.generate_reply(original_text)
+
+                # 找到回复框
+                reply_btn = page.query_selector('[data-testid="reply"]')
+                if reply_btn:
+                    reply_btn.click()
+                    page.wait_for_timeout(1000)
+
+                    textbox = page.query_selector('[data-testid="tweetTextarea_0"]')
+                    if textbox:
+                        textbox.fill(text)
+                        page.wait_for_timeout(500)
+
+                        post_btn = page.query_selector('[data-testid="tweetButton"]')
+                        if post_btn:
+                            post_btn.click()
+                            page.wait_for_timeout(2000)
+
+                            browser.close()
+                            return {"success": True, "text": text}
+
+                browser.close()
+                return {"success": False, "error": "未找到回复按钮"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
