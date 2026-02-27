@@ -144,6 +144,35 @@ def search(ctx, query: str, limit: int):
 
 
 @twitter.command()
+@click.pass_context
+def check(ctx):
+    """检查账号和 Cookie 状态"""
+    account = ctx.obj["account"]
+    cookie_file = COOKIES_DIR / f"twitter_{account}.json"
+
+    console.print(f"\n[bold]检查 Twitter 账号: {account}[/bold]\n")
+
+    # 检查 Cookie 文件
+    if not cookie_file.exists():
+        console.print(f"[red]✗ Cookie 文件不存在: {cookie_file}[/red]")
+        console.print(f"[dim]请运行: python agent-reach.py twitter -a {account} config[/dim]")
+        return
+
+    console.print(f"[green]✓ Cookie 文件存在[/green]")
+
+    # 测试登录状态
+    client = TwitterClient(cookie_file, account=account)
+    tweets = client.get_timeline(limit=1)
+
+    if tweets:
+        console.print(f"[green]✓ Cookie 有效，账号正常[/green]")
+        console.print(f"[dim]获取到 {len(tweets)} 条推文[/dim]")
+    else:
+        console.print(f"[red]✗ Cookie 可能已过期[/red]")
+        console.print(f"[yellow]建议重新配置: python agent-reach.py twitter -a {account} config[/yellow]")
+
+
+@twitter.command()
 @click.option("--text", "-t", help="推文内容（可选，与 --ai 二选一）")
 @click.option("--topic", help="AI 生成主题（可选）")
 @click.option("--ai", is_flag=True, help="使用 AI 生成推文")
@@ -239,6 +268,35 @@ def config(ctx):
 
     console.print(f"\n[green]✓ Cookie 已保存到: {cookie_file}[/green]")
     console.print(f"[dim]使用: python agent-reach.py xiaohongshu -a {account} search ...[/dim]")
+
+
+@xiaohongshu.command()
+@click.pass_context
+def check(ctx):
+    """检查账号和 Cookie 状态"""
+    account = ctx.obj["account"]
+    cookie_file = COOKIES_DIR / f"xiaohongshu_{account}.json"
+
+    console.print(f"\n[bold]检查小红书账号: {account}[/bold]\n")
+
+    # 检查 Cookie 文件
+    if not cookie_file.exists():
+        console.print(f"[red]✗ Cookie 文件不存在: {cookie_file}[/red]")
+        console.print(f"[dim]请运行: python agent-reach.py xiaohongshu -a {account} config[/dim]")
+        return
+
+    console.print(f"[green]✓ Cookie 文件存在[/green]")
+
+    # 测试登录状态
+    client = XiaoHongShuClient(cookie_file, account=account)
+    notes = client.search("test", limit=1)
+
+    if notes:
+        console.print(f"[green]✓ Cookie 有效，账号正常[/green]")
+        console.print(f"[dim]搜索功能正常[/dim]")
+    else:
+        console.print(f"[red]✗ Cookie 可能已过期[/red]")
+        console.print(f"[yellow]建议重新配置: python agent-reach.py xiaohongshu -a {account} config[/yellow]")
 
 
 @xiaohongshu.command()
