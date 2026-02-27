@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "agent-reach": {
+      "command": "/Users/zhanghaidong/.openclaw/workspace-001/agent-reach/venv/bin/python3",
+      "args": [
+        "/Users/zhanghaidong/.openclaw/workspace-001/agent-reach/mcp_server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/Users/zhanghaidong/.openclaw/workspace-001/agent-reach"
+      }
+    }
+  }
+}
